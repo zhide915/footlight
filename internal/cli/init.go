@@ -51,7 +51,7 @@ func runInit(args []string) int {
 	case statusUpdated:
 		fmt.Println("statusLine: updated", settingsPath, "(command: "+cmd+"; backup at "+settingsPath+".bak)")
 	case statusNoop:
-		fmt.Println("statusLine: already points to footlight — nothing to do")
+		fmt.Println("statusLine: already points to footlight, nothing to do")
 	case statusRefused:
 		fmt.Fprintln(os.Stderr, "statusLine: an existing statusLine points elsewhere in")
 		fmt.Fprintln(os.Stderr, "            "+settingsPath)
@@ -63,7 +63,7 @@ func runInit(args []string) int {
 		fmt.Printf("warning:    %s has its own statusLine, which overrides the user-global one\n", shadow)
 	}
 
-	fmt.Println("done — your next message refreshes the status line.")
+	fmt.Println("done. Your next message refreshes the status line.")
 	return 0
 }
 

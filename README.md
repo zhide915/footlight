@@ -68,14 +68,14 @@ falls back to defaults, and the status line gains a trailing `⚠ cfg` marker.
 | `model` | model display name | `fg`, `bg` | default `#E0A188`, overridable |
 | `dir` | current directory; basename unless `full` | `full`, `fg`, `bg` | default `#E8B339`, overridable |
 | `git` | branch, then `↑ahead ↓behind +staged ~unstaged ?untracked` | `fg`, `bg` | default `#5BC0BE`, overridable |
-| `lines` | lines added/removed this session (`+N -N`) | — | fixed green `#98C379` / red `#E06C75` |
+| `lines` | lines added/removed this session (`+N -N`) | None | fixed green `#98C379` / red `#E06C75` |
 | `cost` | session cost in USD | `fg`, `bg` | default `#5FC59B`, overridable |
 | `duration` | session wall-clock time | `fg`, `bg` | default `#8DB4E2`, overridable |
 | `effort` | effort level, plus `+ thinking` when enabled | `fg`, `bg` | default `#C678DD`, overridable |
 | `session` | session name | `fg`, `bg` | default `#D19FB4`, overridable |
 | `context` | context-window usage; `bar = true` draws a block-gauge | `bar`, `width` (default 10) | by threshold |
-| `limit_5h` | 5-hour rate-limit usage + time until reset | — | by threshold |
-| `limit_7d` | 7-day rate-limit usage + time until reset | — | by threshold |
+| `limit_5h` | 5-hour rate-limit usage + time until reset | None | by threshold |
+| `limit_7d` | 7-day rate-limit usage + time until reset | None | by threshold |
 
 A widget renders nothing (and is dropped from the line) when its data is absent
 from the session payload. The `context` and `limit_*` widgets take their color
@@ -149,4 +149,4 @@ widgets = [
 | --- | --- |
 | `footlight` | Read session JSON on stdin, print the status line. This is what Claude Code invokes. |
 | `footlight init [--force]` | Write the default config and wire `settings.json` (see Setup). |
-| `footlight dump [file]` | Render like the default command, and also save raw stdin to `file` — useful for capturing a real payload to test against. |
+| `footlight dump [file]` | Render like the default command, and also save raw stdin to `file`. Useful for capturing a real payload to test against. |

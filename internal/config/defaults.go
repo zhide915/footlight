@@ -106,7 +106,7 @@ func toWidgetSpec(v any) (WidgetSpec, error) {
 	}
 }
 
-const DefaultTOML = `# footlight config — https://github.com/zhide915/footlight
+const DefaultTOML = `# footlight config: https://github.com/zhide915/footlight
 # Each [[line]] is one status-line row. A widget is a bare name or a table
 # { type = "name", fg = "cyan", ... }. Colors: named (red, bright_blue), a 256
 # index (0-255), or hex truecolor (#ff8800).
