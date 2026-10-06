@@ -31,10 +31,14 @@ footlight init
   overwrites an existing config).
 - Wires `statusLine` into Claude Code's `settings.json` (under
   `$CLAUDE_CONFIG_DIR`, else `~/.claude`), pointing at
-  `"$HOME/go/bin/footlight.exe"`. If a
+  `"$HOME/go/bin/footlight.exe"`. It changes only the
+  `statusLine` entry, so your key order and formatting stay as they are. If a
   `statusLine` pointing elsewhere is already set, `init` refuses unless given
-  `--force`; when it does replace settings it first writes a `.bak`. It warns if
-  a project-level `.claude/settings.json` (or `settings.local.json`) defines its
+  `--force`. `--force` also rewrites an existing footlight command, which
+  repairs one that points at an old install. It replaces only `command` and
+  `type` and keeps other fields, such as `padding`, when both are present.
+  Before changing an existing file, it writes a `.bak`. It warns if a
+  project-level `.claude/settings.json` (or `settings.local.json`) defines its
   own `statusLine`, since that overrides the global one.
 
 ## Configuration

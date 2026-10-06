@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,36 +103,48 @@ const (
 	statusRefused
 )
 
+// wireSettings leaves every member other than statusLine byte for byte as it
+// was, so the user's key order and formatting survive.
 func wireSettings(path, cmd string, force bool) (wireStatus, error) {
-	want := map[string]any{"type": "command", "command": cmd}
-
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return statusCreated, writeJSON(path, map[string]any{"statusLine": want})
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return 0, err
+		}
+		out := defaultLayout.settings(cmd) + "\n"
+		return statusCreated, os.WriteFile(path, []byte(out), 0o644)
 	}
 	if err != nil {
 		return 0, err
 	}
 
-	var obj map[string]any
-	if err := json.Unmarshal(data, &obj); err != nil {
+	members, open, closing, err := scanObject(data)
+	if err != nil {
 		return 0, fmt.Errorf("existing %s is not valid JSON (refusing to overwrite): %w", path, err)
 	}
 
-	if existing, ok := obj["statusLine"].(map[string]any); ok {
-		if isStatusLine(existing) {
-			return statusNoop, nil
-		}
+	l := layoutOf(data, open)
+	var out []byte
+	if sl, ok := lastMember(members, "statusLine"); !ok {
+		out = insertStatusLine(data, members, open, closing, l, cmd)
+	} else {
 		if !force {
+			var existing any
+			if err := json.Unmarshal(data[sl.start:sl.end], &existing); err != nil {
+				return 0, err
+			}
+			if m, ok := existing.(map[string]any); ok && isStatusLine(m) {
+				return statusNoop, nil
+			}
 			return statusRefused, nil
 		}
+		out = replaceStatusLine(data, sl, l, cmd)
 	}
 
 	if err := os.WriteFile(path+".bak", data, 0o644); err != nil {
 		return 0, fmt.Errorf("writing backup: %w", err)
 	}
-	obj["statusLine"] = want
-	if err := writeJSON(path, obj); err != nil {
+	if err := os.WriteFile(path, out, 0o644); err != nil {
 		return 0, err
 	}
 	return statusUpdated, nil
@@ -141,15 +155,131 @@ func isStatusLine(statusLine map[string]any) bool {
 	return strings.Contains(strings.ToLower(cmd), "footlight")
 }
 
-func writeJSON(path string, obj any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(obj, "", "  ")
+// span is the byte range [start, end) of a JSON value.
+type span struct{ start, end int }
+
+type member struct {
+	key   string
+	value span
+}
+
+// scanObject returns the members of the JSON object that is all of data, in
+// file order, with the offsets of its opening and closing braces.
+func scanObject(data []byte) (members []member, open, closing int, err error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	tok, err := dec.Token()
 	if err != nil {
-		return err
+		return nil, 0, 0, err
 	}
-	return os.WriteFile(path, append(b, '\n'), 0o644)
+	if tok != json.Delim('{') {
+		return nil, 0, 0, errors.New("top level is not an object")
+	}
+	open = int(dec.InputOffset()) - 1
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			return nil, 0, 0, err
+		}
+		end := int(dec.InputOffset())
+		members = append(members, member{key: tok.(string), value: span{end - len(raw), end}})
+	}
+	if _, err := dec.Token(); err != nil {
+		return nil, 0, 0, err
+	}
+	closing = int(dec.InputOffset()) - 1
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, 0, 0, errors.New("unexpected data after the top-level object")
+	}
+	return members, open, closing, nil
+}
+
+// lastMember finds key the way JSON.parse does: a repeated key's last value wins.
+func lastMember(members []member, key string) (span, bool) {
+	for i := len(members) - 1; i >= 0; i-- {
+		if members[i].key == key {
+			return members[i].value, true
+		}
+	}
+	return span{}, false
+}
+
+// layout is how a settings file indents its keys and ends its lines.
+type layout struct{ indent, newline string }
+
+var defaultLayout = layout{indent: "  ", newline: "\n"}
+
+// layoutOf copies the file's line ending and the indentation of the object's
+// first key, keeping the default indent when there is none to copy.
+func layoutOf(data []byte, open int) layout {
+	l := defaultLayout
+	if bytes.Contains(data, []byte("\r\n")) {
+		l.newline = "\r\n"
+	}
+	gap := data[open+1:]
+	gap = gap[:len(gap)-len(bytes.TrimLeft(gap, " \t\r\n"))]
+	if i := bytes.LastIndexByte(gap, '\n'); i >= 0 && i < len(gap)-1 {
+		l.indent = string(gap[i+1:])
+	}
+	return l
+}
+
+// statusLine renders the statusLine object for a top-level key.
+func (l layout) statusLine(cmd string) string {
+	in, nl := l.indent, l.newline
+	return "{" + nl + in + in + `"type": "command",` + nl + in + in + `"command": ` + jsonString(cmd) + nl + in + "}"
+}
+
+// settings renders an object whose only member is statusLine.
+func (l layout) settings(cmd string) string {
+	return "{" + l.newline + l.indent + `"statusLine": ` + l.statusLine(cmd) + l.newline + "}"
+}
+
+// jsonString skips HTML escaping, so a path with & stays readable.
+func jsonString(s string) string {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.Encode(s)
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+func insertStatusLine(data []byte, members []member, open, closing int, l layout, cmd string) []byte {
+	if len(members) == 0 {
+		return splice(data, span{open, closing + 1}, l.settings(cmd))
+	}
+	at := members[len(members)-1].value.end
+	return splice(data, span{at, at}, ","+l.newline+l.indent+`"statusLine": `+l.statusLine(cmd))
+}
+
+// replaceStatusLine rewrites only command and type, so fields such as padding
+// survive. A value without both keys is replaced whole.
+func replaceStatusLine(data []byte, sl span, l layout, cmd string) []byte {
+	members, _, _, err := scanObject(data[sl.start:sl.end])
+	if err == nil {
+		cmdSpan, hasCmd := lastMember(members, "command")
+		typeSpan, hasType := lastMember(members, "type")
+		if hasCmd && hasType && data[sl.start+cmdSpan.start] == '"' {
+			cmdSpan = span{sl.start + cmdSpan.start, sl.start + cmdSpan.end}
+			typeSpan = span{sl.start + typeSpan.start, sl.start + typeSpan.end}
+			// Splice the later range first so the earlier offsets stay valid.
+			if cmdSpan.start > typeSpan.start {
+				return splice(splice(data, cmdSpan, jsonString(cmd)), typeSpan, `"command"`)
+			}
+			return splice(splice(data, typeSpan, `"command"`), cmdSpan, jsonString(cmd))
+		}
+	}
+	return splice(data, sl, l.statusLine(cmd))
+}
+
+func splice(data []byte, s span, text string) []byte {
+	out := make([]byte, 0, len(data)-(s.end-s.start)+len(text))
+	out = append(out, data[:s.start]...)
+	out = append(out, text...)
+	return append(out, data[s.end:]...)
 }
 
 func shadowingFile() string {
