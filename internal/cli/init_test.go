@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -220,6 +221,40 @@ func TestWireSettings_EditsInPlace(t *testing.T) {
 			}
 			if got, _ := os.ReadFile(path); string(got) != tc.want {
 				t.Errorf("file =\n%s\nwant\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCommandString(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "footlight"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	absolute := "'" + filepath.ToSlash(exe) + "'"
+
+	cases := []struct {
+		name  string
+		setup func(onPath string) error // puts a footlight at onPath, or nothing
+		want  string
+	}{
+		{"bare name when PATH resolves to this binary", func(p string) error { return os.Symlink(exe, p) }, "footlight"},
+		{"absolute path when PATH resolves to another footlight", func(p string) error { return os.WriteFile(p, []byte("other"), 0o755) }, absolute},
+		{"absolute path when footlight is not on PATH", func(string) error { return nil }, absolute},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := tc.setup(filepath.Join(dir, name)); err != nil {
+				t.Skipf("cannot place footlight on PATH: %v", err)
+			}
+			t.Setenv("PATH", dir)
+			if got := commandString(); got != tc.want {
+				t.Errorf("commandString() = %s, want %s", got, tc.want)
 			}
 		})
 	}

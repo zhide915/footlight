@@ -30,8 +30,9 @@ footlight init
 - Writes a default `~/.zhide915/footlight.toml` if one doesn't already exist (it never
   overwrites an existing config).
 - Wires `statusLine` into Claude Code's `settings.json` (under
-  `$CLAUDE_CONFIG_DIR`, else `~/.claude`), pointing at
-  `"$HOME/go/bin/footlight.exe"`. It changes only the
+  `$CLAUDE_CONFIG_DIR`, else `~/.claude`). If `footlight` on your `PATH` is
+  the binary you ran, the command is `footlight`. Otherwise, it's the binary's
+  absolute path. `init` prints the command it writes. It changes only the
   `statusLine` entry, so your key order and formatting stay as they are. If a
   `statusLine` pointing elsewhere is already set, `init` refuses unless given
   `--force`. `--force` also rewrites an existing footlight command, which

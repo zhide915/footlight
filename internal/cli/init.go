@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -46,9 +47,9 @@ func runInit(args []string) int {
 	}
 	switch status {
 	case statusCreated:
-		fmt.Println("statusLine: wired into", settingsPath)
+		fmt.Println("statusLine: wired into", settingsPath, "(command: "+cmd+")")
 	case statusUpdated:
-		fmt.Println("statusLine: updated", settingsPath, "(backup at "+settingsPath+".bak)")
+		fmt.Println("statusLine: updated", settingsPath, "(command: "+cmd+"; backup at "+settingsPath+".bak)")
 	case statusNoop:
 		fmt.Println("statusLine: already points to footlight — nothing to do")
 	case statusRefused:
@@ -81,8 +82,27 @@ func writeDefaultConfig(path string) (created bool, err error) {
 	return true, nil
 }
 
+// Claude Code runs the command through a shell, which is Git Bash on Windows, so
+// the path uses forward slashes and single quotes to keep \, $, and backticks
+// literal.
 func commandString() string {
-	return `"$HOME/go/bin/footlight.exe"`
+	exe, err := os.Executable()
+	if err != nil {
+		return "footlight"
+	}
+	if found, err := exec.LookPath("footlight"); err == nil && sameFile(found, exe) {
+		return "footlight"
+	}
+	return "'" + strings.ReplaceAll(filepath.ToSlash(exe), "'", `'\''`) + "'"
+}
+
+func sameFile(a, b string) bool {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	return err == nil && os.SameFile(ai, bi)
 }
 
 func claudeSettingsPath() string {
