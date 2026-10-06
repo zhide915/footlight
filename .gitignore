@@ -1,0 +1,8 @@
+# Built binaries
+/footlight
+/footlight.exe
+*.exe
+
+# Go
+*.test
+*.out
